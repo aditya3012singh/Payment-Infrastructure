@@ -70,7 +70,7 @@ public class LedgerService {
 
             // We must fetch the account with a PESSIMISTIC_WRITE lock. 
             // This prevents race conditions if 100 people try to pay the same merchant simultaneously.
-            Account account = accountRepository.findByName(entry.getAccount().getName())
+            Account account = accountRepository.findByNameForUpdate(entry.getAccount().getName())
                     .orElseThrow(() -> new PaymentProcessingException("Account not found: " + entry.getAccount().getName(), "ACCOUNT_NOT_FOUND"));
 
             // Update balance

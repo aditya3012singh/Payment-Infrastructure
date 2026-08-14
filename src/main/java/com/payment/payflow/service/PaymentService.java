@@ -1,8 +1,14 @@
 package com.payment.payflow.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.payment.payflow.entity.Account;
+import com.payment.payflow.entity.LedgerEntry;
+import com.payment.payflow.entity.OutboxEvent;
 import com.payment.payflow.entity.Payment;
+import com.payment.payflow.enums.EntryDirection;
 import com.payment.payflow.enums.PaymentStatus;
 import com.payment.payflow.exception.PaymentProcessingException;
+import com.payment.payflow.repository.OutboxEventRepository;
 import com.payment.payflow.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -10,9 +16,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +30,10 @@ public class PaymentService {
     
     private final PaymentRepository paymentRepository;
     private final StringRedisTemplate redisTemplate;
+    private final LedgerService ledgerService;
+    private final OutboxEventRepository outboxEventRepository;
+    
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     private static final String IDEMPOTENCY_PREFIX = "payment:idempotency:";
 
@@ -62,7 +74,35 @@ public class PaymentService {
             // 3. Save to PostgreSQL
             payment = paymentRepository.save(payment);
             
-            // 4. Update Redis to indicate completion (optional, but good practice)
+            // 4. Move the money in the Ledger!
+            List<LedgerEntry> entries = List.of(
+                    LedgerEntry.builder()
+                            .account(Account.builder().name("USER_DEFAULT_WALLET").build())
+                            .direction(EntryDirection.DEBIT)
+                            .amount(amount)
+                            .build(),
+                    LedgerEntry.builder()
+                            .account(Account.builder().name("MERCHANT_DEFAULT_WALLET").build())
+                            .direction(EntryDirection.CREDIT)
+                            .amount(amount)
+                            .build()
+            );
+
+            ledgerService.recordTransaction(
+                    idempotencyKey, 
+                    "Payment processing for key: " + idempotencyKey, 
+                    entries
+            );
+            
+            // 5. Save to Outbox for Kafka to process asynchronously
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .eventType("PaymentCreated")
+                    .aggregateId(payment.getId().toString())
+                    .payload(objectMapper.writeValueAsString(payment))
+                    .build();
+            outboxEventRepository.save(outboxEvent);
+            
+            // 6. Update Redis to indicate completion (optional, but good practice)
             redisTemplate.opsForValue().set(redisKey, "COMPLETED", Duration.ofHours(24));
             
             log.info("Successfully created payment with ID: {}", payment.getId());

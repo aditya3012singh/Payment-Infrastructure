@@ -26,7 +26,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .errorCode("INTERNAL_SERVER_ERROR")
-                .message("An unexpected error occurred.")
+                .message(ex.getMessage() != null ? ex.getMessage() : ex.toString())
                 .timestamp(LocalDateTime.now())
                 .build();
         

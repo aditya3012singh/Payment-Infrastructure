@@ -26,10 +26,11 @@ public class PaymentEventConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentEventConsumer.class);
 
-    private final ObjectMapper objectMapper;
     private final PaymentProviderGateway providerGateway;
     private final PaymentRepository paymentRepository;
     private final StringRedisTemplate redisTemplate;
+    
+    private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     private static final String CONSUMER_IDEMPOTENCY_PREFIX = "payment:consumer:processed:";
 

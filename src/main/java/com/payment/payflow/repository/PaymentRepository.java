@@ -13,4 +13,6 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
     // Spring Data JPA will automatically implement this method based on the name!
     // We will use this to quickly check if a payment with this key already exists.
     Optional<Payment> findByIdempotencyKey(String idempotencyKey);
+    
+    java.util.List<Payment> findByStatus(com.payment.payflow.enums.PaymentStatus status);
 }
